@@ -1,37 +1,42 @@
 import pika
 import smtplib
+import logging
 
-# ConfiguraciÃ³n de conexiÃ³n con RabbitMQ
-connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-channel = connection.channel()
-
-# Declarar una cola
-channel.queue_declare(queue='correo')
+# Configurar logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def callback(ch, method, properties, body):
-    # Enviar el mensaje por correo electrÃ³nico
-    mensaje = body.decode('utf-8')
-    destinatario = 'ejemplo@dominio.com'
-    remitente = 'remitente@dominio.com'
-    asunto = 'Mensaje recibido desde la cola'
+    try:
+        mensaje = body.decode('utf-8')
+        destinatario = 'ejemplo@dominio.com'
+        remitente = 'remitente@dominio.com'
+        asunto = 'Mensaje recibido desde la cola'
 
-    # ConfiguraciÃ³n de SMTP
-    servidor_smtp = 'smtp.ejemplo.com'
-    puerto_smtp = 587
+        servidor_smtp = 'smtp.ejemplo.com'
+        puerto_smtp = 587
+        cuerpo_mensaje = f'Asunto: {asunto}\n\n{mensaje}'
 
-    # Crear mensaje
-    cuerpo_mensaje = f'Asunto: {asunto}\n\n{mensaje}'
+        with smtplib.SMTP(servidor_smtp, puerto_smtp) as servidor:
+            servidor.starttls()
+            servidor.login('usuario@dominio.com', 'contraseña')
+            servidor.sendmail(remitente, destinatario, cuerpo_mensaje)
+        
+        logging.info(f"Mensaje enviado por correo electrónico: {mensaje}")
+    except Exception as e:
+        logging.error(f"Error al procesar el mensaje: {e}")
 
-    # Enviar correo electrÃ³nico
-    with smtplib.SMTP(servidor_smtp, puerto_smtp) as servidor:
-        servidor.starttls()
-        servidor.login('usuario@dominio.com', 'contraseÃ±a')
-        servidor.sendmail(remitente, destinatario, cuerpo_mensaje)
+def main():
+    try:
+        # Conectar a RabbitMQ en localhost, puerto 5672
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost', 5672))
+        channel = connection.channel()
+        channel.queue_declare(queue='correo')
+        channel.basic_consume(queue='correo', on_message_callback=callback, auto_ack=True)
+        
+        logging.info('Esperando mensajes. Presiona CTRL+C para salir.')
+        channel.start_consuming()
+    except Exception as e:
+        logging.error(f"Error al conectar con RabbitMQ: {e}")
 
-    print(f"Mensaje enviado por correo electrÃ³nico: {mensaje}")
-
-# Consumir mensajes de la cola
-channel.basic_consume(queue='correo', on_message_callback=callback, auto_ack=True)
-
-print('Esperando mensajes. Presiona CTRL+C para salir.')
-channel.start_consuming()
+if __name__ == '__main__':
+    main()
